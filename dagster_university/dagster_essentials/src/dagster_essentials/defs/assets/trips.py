@@ -94,3 +94,34 @@ def taxi_trips() -> None:
     )
 
     conn.execute(query)
+
+@dg.asset(
+        deps = ['taxi_zones_file']
+)
+def taxi_zones() -> None:
+    """
+    Docstring for taxi_zones
+    """
+
+    query = f"""
+        CREATE OR REPLACE TABLE zones AS 
+        (
+            SELECT
+                LocationID as zone_id,
+                zone as zone,
+                borough as borough, 
+                the_geom as geometry
+            FROM '{constants.TAXI_ZONES_FILE_PATH}'
+        );
+    """
+
+    conn = backoff(
+        fn = duckdb.connect,
+        retry_on = (RuntimeError, duckdb.IOException),
+        kwargs = {
+            "database": os.getenv("DUCKDB_DATABASE")
+        },
+        max_retries = 10
+    )
+
+    conn.execute(query)
