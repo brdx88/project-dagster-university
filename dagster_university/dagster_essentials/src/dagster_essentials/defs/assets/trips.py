@@ -1,12 +1,8 @@
 # src/dagster_essentials/defs/assets/trips.py
 
-from dagster_essentials.defs.assets import constants
-import dagster as dg
 import requests
-import os
-import duckdb
-from dagster._utils.backoff import backoff
-
+import dagster as dg
+from dagster_essentials.defs.assets import constants
 from dagster_duckdb import DuckDBResource
 
 # 1. A description of the asset is added using a docstring ("""), which will display in the Dagster UI.
@@ -92,7 +88,7 @@ def taxi_trips(database: DuckDBResource) -> None:
 @dg.asset(
         deps = ['taxi_zones_file']
 )
-def taxi_zones() -> None:
+def taxi_zones(database: DuckDBResource) -> None:
     """
     Docstring for taxi_zones
     """
@@ -109,13 +105,5 @@ def taxi_zones() -> None:
         );
     """
 
-    conn = backoff(
-        fn = duckdb.connect,
-        retry_on = (RuntimeError, duckdb.IOException),
-        kwargs = {
-            "database": os.getenv("DUCKDB_DATABASE")
-        },
-        max_retries = 10
-    )
-
-    conn.execute(query)
+    with database.get_connection() as conn:
+        conn.execute(query)
