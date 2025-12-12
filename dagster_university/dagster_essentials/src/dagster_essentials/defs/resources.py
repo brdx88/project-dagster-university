@@ -1,15 +1,12 @@
 # src/dagster_essentials/defs/resources.py
 from dagster_duckdb import DuckDBResource
+import dagster as dg
 
 
 database_resource = DuckDBResource(
-    database="data/staging/data.duckdb"
+    database = dg.EnvVar("DUCKDB_DATABASE")
 )
 
-
-# import dagster as dg
-
-
-# @dg.definitions
-# def resources() -> dg.Definitions:
-#     return dg.Definitions(resources={})
+@dg.definitions
+def resources():
+    return dg.Definitions(resources = {'database': database_resource})
