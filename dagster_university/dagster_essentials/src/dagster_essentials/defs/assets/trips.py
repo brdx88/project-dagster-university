@@ -7,6 +7,8 @@ import os
 import duckdb
 from dagster._utils.backoff import backoff
 
+from dagster_duckdb import DuckDBResource
+
 # 1. A description of the asset is added using a docstring ("""), which will display in the Dagster UI.
 # 2. Next, a variable named month_to_fetch is defined. The value is 2023-03, or March 2023.
 # 3. A second variable named raw_trips is defined. This variable uses the get function from the requests library (requests.get) to retrieve a parquet file from the NYC Open Data portal website.
@@ -46,7 +48,7 @@ def taxi_zones_file() -> None:
 @dg.asset(
     deps = ['taxi_trips_file']
 )
-def taxi_trips() -> None:
+def taxi_trips(database: DuckDBResource) -> None:
     """
     The raw taxi trips data loaded into a DuckDB database.
 
@@ -84,16 +86,8 @@ def taxi_trips() -> None:
         );
     """
 
-    conn = backoff(
-        fn = duckdb.connect,
-        retry_on = (RuntimeError, duckdb.IOException),
-        kwargs = {
-            "database": os.getenv("DUCKDB_DATABASE")
-        },
-        max_retries = 10
-    )
-
-    conn.execute(query)
+    with database.get_connection() as conn:
+        conn.execute(query)
 
 @dg.asset(
         deps = ['taxi_zones_file']
