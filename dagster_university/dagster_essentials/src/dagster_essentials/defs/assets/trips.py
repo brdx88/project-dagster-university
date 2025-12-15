@@ -5,6 +5,8 @@ import dagster as dg
 from dagster_essentials.defs.assets import constants
 from dagster_duckdb import DuckDBResource
 
+from dagster_essentials.defs.partitions import monthly_partition
+
 # 1. A description of the asset is added using a docstring ("""), which will display in the Dagster UI.
 # 2. Next, a variable named month_to_fetch is defined. The value is 2023-03, or March 2023.
 # 3. A second variable named raw_trips is defined. This variable uses the get function from the requests library (requests.get) to retrieve a parquet file from the NYC Open Data portal website.
@@ -13,13 +15,15 @@ from dagster_duckdb import DuckDBResource
 # 6. The parquet file is created and saved at data/raw/taxi_trips_2023-03.parquet
 # 7. The asset function’s execution completes successfully. This completion indicates to Dagster that an asset has been materialized, and Dagster will update the UI to reflect that asset materialized successfully.
 
-@dg.asset
-def taxi_trips_file() -> None:
+@dg.asset(
+        partitions_def = monthly_partition
+)
+def taxi_trips_file(context: dg.AssetExecutionContext) -> None:
     """
     The raw parquet file for the taxi trips dataset. Sourced from NYC Open Data portal.
     """
-
-    month_to_fetch = '2023-03'
+    partition_date_str = context.partition_key
+    month_to_fetch = partition_date_str[:-3]
 
     raw_trips = requests.get(
         f"https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_{month_to_fetch}.parquet"
