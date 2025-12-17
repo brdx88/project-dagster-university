@@ -5,7 +5,7 @@ import dagster as dg
 from dagster_essentials.defs.assets import constants
 from dagster_duckdb import DuckDBResource
 
-from dagster_essentials.defs.partitions import monthly_partition
+from dagster_essentials.defs.partitions import monthly_partition, weekly_partition
 
 # 1. A description of the asset is added using a docstring ("""), which will display in the Dagster UI.
 # 2. Next, a variable named month_to_fetch is defined. The value is 2023-03, or March 2023.
@@ -46,9 +46,10 @@ def taxi_zones_file() -> None:
         output_file.write(raw_zones.content)
 
 @dg.asset(
-    deps = ['taxi_trips_file']
+  deps=["taxi_trips_file"],
+  partitions_def=monthly_partition,
 )
-def taxi_trips(database: DuckDBResource) -> None:
+def taxi_trips(context: dg.AssetExecutionContext, database: DuckDBResource) -> None:
     """
     The raw taxi trips data loaded into a DuckDB database.
 
@@ -68,26 +69,34 @@ def taxi_trips(database: DuckDBResource) -> None:
     # 5. The DUCKDB_DATABASE environment variable, sourced from your project’s .env file, resolves to data/staging/data.duckdb. Note: We set up this file in Lesson 2 - refer to this lesson if you need a refresher. If this file isn’t set up correctly, the materialization will result in an error.
     # 6. Finally, conn is paired with the DuckDB execute method, where our SQL query (query) is passed in as an argument. This tells the asset that, when materializing, to connect to the DuckDB database and execute the query in query.
 
-    query = """
-    CREATE OR REPLACE TABLE trips AS 
-    (
-        SELECT
-            VendorID as vendor_id,
-            PULocationID as pickup_zone_id,
-            DOLocationID as dropoff_zone_id,
-            RatecodeID as rate_cod_id,
-            payment_type as payment_type,
-            tpep_dropoff_datetime as dropoff_datetime,
-            tpep_pickup_datetime as pickup_datetime,
-            trip_distance as trip_distance,
-            passenger_count as passenger_count,
-            total_amount as total_amount
-        FROM 'data/raw/taxi_trips_2023-03.parquet'
-        );
+    partition_date_str = context.partition_key
+    month_to_fetch = partition_date_str[:-3]
+
+    query_drop = "drop table if exists trips;"
+
+    query_create = f"""
+    create table if not exists trips (
+      vendor_id integer, pickup_zone_id integer, dropoff_zone_id integer,
+      rate_code_id double, payment_type integer, dropoff_datetime timestamp,
+      pickup_datetime timestamp, trip_distance double, passenger_count double,
+      total_amount double, partition_date varchar
+    );
+    """
+
+    # delete from trips where partition_date = '{month_to_fetch}';
+
+    query_insert = f"""
+    insert into trips
+    select
+      VendorID, PULocationID, DOLocationID, RatecodeID, payment_type, tpep_dropoff_datetime,
+      tpep_pickup_datetime, trip_distance, passenger_count, total_amount, '{month_to_fetch}' as partition_date
+    from '{constants.TAXI_TRIPS_TEMPLATE_FILE_PATH.format(month_to_fetch)}';
     """
 
     with database.get_connection() as conn:
-        conn.execute(query)
+        conn.execute(query_drop)
+        conn.execute(query_create)
+        conn.execute(query_insert)
 
 @dg.asset(
         deps = ['taxi_zones_file']
